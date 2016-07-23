@@ -1,25 +1,139 @@
 ---
-title: "Reproducible Research: Peer Assessment 1"
-output: 
-  html_document:
-    keep_md: true
+title: "Reproducible Research"
+author: "Carlos Calderon"
+date: "July 23, 2016"
+output: html_document
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
 
-## Loading and preprocessing the data
+## Project # 1
 
+Introduction
 
+It is now possible to collect a large amount of data about personal movement using activity monitoring devices such as a Fitbit, Nike Fuelband, or Jawbone Up. These type of devices are part of the "quantified self" movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. But these data remain under-utilized both because the raw data are hard to obtain and there is a lack of statistical methods and software for processing and interpreting the data.
 
-## What is mean total number of steps taken per day?
+This assignment makes use of data from a personal activity monitoring device. This device collects data at 5 minute intervals through out the day. The data consists of two months of data from an anonymous individual collected during the months of October and November, 2012 and include the number of steps taken in 5 minute intervals each day.
 
+The data for this assignment can be downloaded from the course web site:
 
+https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip
 
-## What is the average daily activity pattern?
+The variables included in this dataset are:
 
+        steps: Number of steps taking in a 5-minute interval (missing values are coded as NA)
 
+        date: The date on which the measurement was taken in YYYY-MM-DD format
 
-## Imputing missing values
+        interval: Identifier for the 5-minute interval in which measurement was taken
 
+The dataset is stored in a comma-separated-value (CSV) file and there are a total of 17,568 observations in this dataset. Below a summary of the original data.
 
+```{r echo=FALSE}
+data <- 'https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip'
+download.file(data, 'repdata-data-activity.zip')
+unzip('repdata-data-activity.zip')
+activity <- read.csv("activity.csv", stringsAsFactors=FALSE)
+summary(activity)
+```
 
-## Are there differences in activity patterns between weekdays and weekends?
+```{r}
+# Load libraries 
+
+library(RCurl)
+library(lubridate)
+library(plyr)
+library(ggplot2)
+library(lattice)
+
+# Section #1: Loading and Processing the Data
+
+#Get Data from Website and unzip file in your current working directory
+
+data <- 'https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip'
+download.file(data, 'repdata-data-activity.zip')
+unzip('repdata-data-activity.zip')
+activity <- read.csv("activity.csv", stringsAsFactors=FALSE)
+
+#Change date field and clean the data
+activity$day <- weekdays(as.Date(activity$date))
+activity$DateTime<- as.POSIXct(activity$date, format="%Y-%m-%d")
+clean <- activity[!is.na(activity$steps),]
+
+# summary of total steps per date
+sumTable <- aggregate(activity$steps ~ activity$date, FUN=sum)
+colnames(sumTable)<- c("Date", "Steps")
+
+## Section # 2. What is mean total number of steps taken per day?
+
+# Creating the historgram of total steps per day
+hist(sumTable$Steps, breaks=5, xlab="Steps", col = "red", main = "Total Steps per Day")
+
+# Calculate the mean and the median of the steps per day
+as.integer(mean(sumTable$Steps))
+as.integer(median(sumTable$Steps))
+
+## Section # 3. What is the average daily activity pattern?
+
+# create average number of steps per interval
+intervalTable <- ddply(clean, .(interval), summarize, Avg = mean(steps))
+
+# create max steps by interval
+maxSteps <- max(intervalTable$Avg)
+
+# Create line plot of average number of steps per interval
+p <- ggplot(intervalTable, aes(x=interval, y=Avg),xlab = "Interval", ylab="Average Number of Steps")
+p + geom_line(colour = 'red')+xlab("Interval")+ylab("Average Number of Steps")+ggtitle("Average Number of Steps per Interval")
+
+# Which interval contains the maximum average number of steps
+intervalTable[intervalTable$Avg==maxSteps,1]
+
+# Section # 4. Input Missing Values
+
+# Process and calculate the number of NAs in original data set
+nrow(activity[is.na(activity$steps),])
+
+# Create table with the average number of steps per weekday and interval
+avgTable <- ddply(clean, .(interval, day), summarize, Avg = mean(steps))
+
+# Create a new dataset with all NAs for substitution
+NAdata<- activity[is.na(activity$steps),]
+
+# Merge NA data with average weekday interval for substitution
+newdataset<-merge(NAdata, avgTable, by=c("interval", "day"))
+
+# Reorder the new substituded data in the same format as clean data set
+finalnewdata<- newdataset[,c(6,4,1,2,5)]
+colnames(finalnewdata)<- c("steps", "date", "interval", "day", "DateTime")
+
+# Merge the NA averages and non NA data together
+mergedData <- rbind(clean, finalnewdata)
+
+# Create sum of steps per date to compare with step 1
+sumTable2 <- aggregate(mergedData$steps ~ mergedData$date, FUN=sum)
+colnames(sumTable2)<- c("Date", "Steps")
+
+## Creating the histogram of total steps per day, categorized by data set to show impact
+hist(sumTable2$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NA and Non NA", col="Black")
+hist(sumTable$Steps, breaks=5, xlab="Steps", main = "Total Steps per Day with NA and Non NA", col="Red", add=T)
+legend("topright", c("NA Data", "Non-NA Data"), fill=c("black", "red") )
+
+# Calculate the mean and the median with new data set
+as.integer(mean(sumTable2$Steps))
+as.integer(median(sumTable2$Steps))
+
+# Section # 5. Are there differences in activity patterns between weekdays and weekends?
+
+## Create new category based on the days of the week
+mergedData$DayCategory <- ifelse(mergedData$day %in% c("Saturday", "Sunday"), "Weekend", "Weekday")
+
+## Summarize data by interval and type of day
+intervalTable2 <- ddply(mergedData, .(interval, DayCategory), summarize, Avg = mean(steps))
+
+##Plot data in a panel plot
+xyplot(Avg~interval|DayCategory, data=intervalTable2, type="l",  layout = c(1,2),
+       main="Average Steps per Interval Based on Type of Day", 
+       ylab="Average Number of Steps", xlab="Interval")
+```
